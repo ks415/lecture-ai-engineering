@@ -162,11 +162,12 @@ def display_history_list(history_df):
             cols[1].metric("応答時間(秒)", f"{row['response_time']:.2f}")
             cols[2].metric("単語数", f"{row['word_count']}")
 
-            cols = st.columns(3)
+            cols = st.columns(4)
             # NaNの場合はハイフン表示
             cols[0].metric("BLEU", f"{row['bleu_score']:.4f}" if pd.notna(row['bleu_score']) else "-")
             cols[1].metric("類似度", f"{row['similarity_score']:.4f}" if pd.notna(row['similarity_score']) else "-")
             cols[2].metric("関連性", f"{row['relevance_score']:.4f}" if pd.notna(row['relevance_score']) else "-")
+            cols[3].metric("具体性", f"{row['specificity_score']:.4f}" if pd.notna(row['specificity_score']) else "-")
 
     st.caption(f"{total_items} 件中 {start_idx+1} - {min(end_idx, total_items)} 件を表示")
 

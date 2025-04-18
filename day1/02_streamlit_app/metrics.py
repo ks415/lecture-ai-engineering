@@ -26,6 +26,13 @@ except Exception as e:
         f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
         return f1 # F1スコアを返す（簡易的な代替）
 
+# Janome Tokenizerの初期化
+try:
+    janome_tokenizer = Tokenizer()
+except Exception as e:
+    st.error(f"Janome Tokenizerの初期化に失敗しました: {e}")
+    janome_tokenizer = None # エラー時はNoneにしておく
+
 def initialize_nltk():
     """NLTKのデータダウンロードを試みる関数"""
     try:
@@ -40,14 +47,47 @@ def calculate_metrics(answer, correct_answer):
     bleu_score = 0.0
     similarity_score = 0.0
     relevance_score = 0.0
+    specificity_score = 0.0  # 新しい指標：具体性スコア
 
     if not answer: # 回答がない場合は計算しない
-        return bleu_score, similarity_score, word_count, relevance_score
+        return bleu_score, similarity_score, word_count, relevance_score, specificity_score
 
-    # 単語数のカウント
-    tokenizer = Tokenizer()
-    tokens = list(tokenizer.tokenize(answer))  # ← list() でイテレータをリストに変換
-    word_count = len(tokens)
+    # # 単語数のカウント
+    # tokenizer = Tokenizer()
+    # tokens = list(tokenizer.tokenize(answer))  # ← list() でイテレータをリストに変換
+    # word_count = len(tokens)
+
+    # --- Janomeを使った形態素解析 ---
+    try:
+        # Tokenizer().tokenize はイテレータを返すためリスト化する
+        tokens = list(janome_tokenizer.tokenize(answer))
+        word_count = len(tokens) # 単語数（トークン数）
+    except Exception as e:
+        st.warning(f"Janomeでの形態素解析中にエラーが発生しました: {e}")
+        tokens = [] # エラー時は空リスト
+        word_count = len(re.findall(r'\b\w+\b', answer)) # 代替として簡易単語数をカウント
+
+    # 具体性スコア (Specificity Score) の計算
+    if word_count > 0 and tokens: # トークンがあり、単語数が0より大きい場合のみ計算
+        count_proper_noun = 0
+        count_numeral = 0
+        try:
+            for token in tokens:
+                part_of_speech_info = token.part_of_speech.split(',')
+                # 品詞情報が十分にあるか確認
+                if len(part_of_speech_info) >= 2:
+                    # 固有名詞をカウント
+                    if part_of_speech_info[0] == '名詞' and part_of_speech_info[1] == '固有名詞':
+                        count_proper_noun += 1
+                    # 数（名詞）をカウント
+                    elif part_of_speech_info[0] == '名詞' and part_of_speech_info[1] == '数':
+                        count_numeral += 1
+            specificity_score = (count_proper_noun + count_numeral) / word_count
+        except Exception as e:
+            # st.warning(f"具体性スコア計算中にエラーが発生しました: {e}")
+            specificity_score = 0.0 # エラー時は0
+    else:
+        specificity_score = 0.0
 
     # 正解がある場合のみBLEUと類似度を計算
     if correct_answer:
@@ -93,7 +133,7 @@ def calculate_metrics(answer, correct_answer):
             # st.warning(f"関連性スコア計算エラー: {e}")
             relevance_score = 0.0 # エラー時は0
 
-    return bleu_score, similarity_score, word_count, relevance_score
+    return bleu_score, similarity_score, word_count, relevance_score, specificity_score
 
 def get_metrics_descriptions():
     """評価指標の説明を返す"""
@@ -104,5 +144,6 @@ def get_metrics_descriptions():
         "類似度スコア (similarity_score)": "TF-IDFベクトルのコサイン類似度による、正解と回答の意味的な類似性 (0〜1の値)",
         "単語数 (word_count)": "回答に含まれる単語の数。情報量や詳細さの指標",
         "関連性スコア (relevance_score)": "正解と回答の共通単語の割合。トピックの関連性を表す (0〜1の値)",
-        "効率性スコア (efficiency_score)": "正確性を応答時間で割った値。高速で正確な回答ほど高スコア"
+        "効率性スコア (efficiency_score)": "正確性を応答時間で割った値。高速で正確な回答ほど高スコア",
+        "具体性スコア (specificity_score)": "回答に含まれる固有名詞と数（名詞）の割合。回答の具体性や詳細さを示す (0〜1の値)",  # 追加
     }
