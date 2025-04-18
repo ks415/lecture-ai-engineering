@@ -1,20 +1,227 @@
 # ui.py
 import streamlit as st
 import pandas as pd
-import time
+import html
 from database import save_to_db, get_chat_history, get_db_count, clear_db
 from llm import generate_response
 from data import create_sample_evaluation_data
 from metrics import get_metrics_descriptions
+import datetime
+
+# --- LINE風スタイルの定義 ---
+def apply_line_style():
+    """LINE風のスタイルをアプリに適用する"""
+    # LINEのブランドカラー
+    line_primary_color = "#06C755"  # LINE緑
+    line_background = "#FFFFFF"  # 白背景
+    line_chat_bg = "#F5F5F5"  # チャット画面背景色（薄いグレー）
+    line_text_color = "#333333"  # テキスト色
+    line_light_gray = "#DDDDDD"  # 薄いグレー（区切り線など）
+    line_timestamp = "#AAAAAA"  # タイムスタンプの色
+    
+    # CSSスタイルをapply
+    st.markdown(f"""
+    <style>
+        /* 全体の背景とテキスト */
+        .stApp {{
+            background-color: {line_chat_bg};
+            color: {line_text_color};
+            font-family: 'Hiragino Kaku Gothic Pro', 'ヒラギノ角ゴ Pro W3', Meiryo, 'メイリオ', sans-serif;
+        }}
+        
+        /* ヘッダースタイル */
+        .stTitleContainer h1 {{
+            color: {line_primary_color} !important;
+            font-weight: bold;
+        }}
+        
+        /* ボタンスタイル */
+        .stButton>button {{
+            background-color: {line_primary_color};
+            color: white;
+            border-radius: 6px;
+            font-weight: bold;
+            border: none;
+            padding: 0.3rem 1rem;
+        }}
+        
+        /* テキストエリアスタイル */
+        .stTextArea textarea {{
+            border-radius: 20px;
+            border: 1px solid #999999;  /* 境界線を濃くする */
+            padding: 10px;
+            background-color: #FFFFFF;  /* 背景色を白に設定 */
+            color: #333333;  /* テキスト色を濃く設定 */
+            font-weight: normal;  /* テキストを標準の太さに */
+        }}
+
+        /* テキストエリアのラベル */
+        .stTextArea label {{
+            color: #333333 !important;  /* ラベルの色を濃く設定 */
+            font-weight: bold;  /* ラベルを太字に */
+        }}
+        
+        /* LINE風チャット画面のコンテナ */
+        .chat-container {{
+            background-color: {line_chat_bg};
+            padding: 10px;
+            overflow-y: auto;
+            border-radius: 5px;
+        }}
+        
+        /* 自分（右側）のメッセージ */
+        .user-message {{
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 15px;
+        }}
+        
+        .user-bubble {{
+            background-color: {line_primary_color};
+            color: white;
+            border-radius: 20px;
+            padding: 10px 15px;
+            max-width: 70%;
+            position: relative;
+            margin-right: 10px;
+            word-wrap: break-word;
+        }}
+        
+        /* 相手（左側）のメッセージ */
+        .bot-message {{
+            display: flex;
+            justify-content: flex-start;
+            margin-bottom: 15px;
+        }}
+        
+        .bot-avatar {{
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: white;
+            margin-right: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            border: 1px solid {line_light_gray};
+            overflow: hidden;
+        }}
+        
+        .bot-bubble {{
+            background-color: white;
+            color: {line_text_color};
+            border-radius: 20px;
+            padding: 10px 15px;
+            max-width: 70%;
+            position: relative;
+            word-wrap: break-word;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }}
+        
+        /* タイムスタンプ */
+        .timestamp {{
+            font-size: 11px;
+            color: {line_timestamp};
+            margin-top: 5px;
+            text-align: right;
+        }}
+        
+        /* タブのスタイル */
+        .stTabs [data-baseweb="tab-list"] {{
+            gap: 24px;
+        }}
+        
+        .stTabs [data-baseweb="tab"] {{
+            height: 50px;
+            white-space: pre-wrap;
+            border-radius: 4px 4px 0px 0px;
+            font-weight: bold;
+            font-size: 14px;
+        }}
+        
+        /* フィードバックエリア */
+        .feedback-area {{
+            background-color: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 10px 0;
+            border: 1px solid {line_light_gray};
+        }}
+        
+        /* LINE風区切り線 */
+        .line-divider {{
+            text-align: center;
+            margin: 15px 0;
+            color: {line_timestamp};
+            font-size: 12px;
+            position: relative;
+        }}
+        
+        .line-divider:before, .line-divider:after {{
+            content: "";
+            display: inline-block;
+            width: 40%;
+            height: 1px;
+            background: {line_light_gray};
+            margin: 0 10px;
+            vertical-align: middle;
+        }}
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- LINE風メッセージ表示用ヘルパー関数 ---
+def display_user_message(content, timestamp=None):
+    """ユーザーのメッセージを右側に表示"""
+    if timestamp is None:
+        timestamp = datetime.datetime.now().strftime("%H:%M")
+    
+    st.markdown(f"""
+    <div class="user-message">
+        <div>
+            <div class="user-bubble">{content}</div>
+            <div class="timestamp">{timestamp}</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+def display_bot_message(content, timestamp=None):
+    """ボットのメッセージを左側に表示"""
+    if timestamp is None:
+        timestamp = datetime.datetime.now().strftime("%H:%M")
+    
+    # 空白や空文字列の場合は表示しない
+    if content is None or content.strip() == "":
+        content = "メッセージを表示できません。"
+    
+    # HTMLタグをエスケープして安全に表示
+    safe_content = html.escape(content)
+    # 改行をHTMLの改行タグに変換
+    safe_content = safe_content.replace('\n', '<br>')
+    
+    st.markdown(f"""
+    <div class="bot-message">
+        <div class="bot-avatar">AI</div>
+        <div>
+            <div class="bot-bubble">{safe_content}</div>
+            <div class="timestamp">{timestamp}</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+def display_date_divider(date_str):
+    """日付の区切り線を表示"""
+    st.markdown(f"""
+    <div class="line-divider">{date_str}</div>
+    """, unsafe_allow_html=True)
 
 # --- チャットページのUI ---
 def display_chat_page(pipe):
     """チャットページのUIを表示する"""
-    st.subheader("質問を入力してください")
-    user_question = st.text_area("質問", key="question_input", height=100, value=st.session_state.get("current_question", ""))
-    submit_button = st.button("質問を送信")
-
-    # セッション状態の初期化（安全のため）
+    # LINE風スタイルを適用
+    apply_line_style()
+    
+    # セッション状態の初期化
     if "current_question" not in st.session_state:
         st.session_state.current_question = ""
     if "current_answer" not in st.session_state:
@@ -23,54 +230,109 @@ def display_chat_page(pipe):
         st.session_state.response_time = 0.0
     if "feedback_given" not in st.session_state:
         st.session_state.feedback_given = False
-
-    # 質問が送信された場合
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+    
+    # タイトルとサブタイトル
+    st.subheader("📱 AIアシスタント")
+    
+    # チャット履歴の表示
+    with st.container():
+        st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+        
+        # 現在の日付を表示
+        today = datetime.datetime.now().strftime("%Y年%m月%d日")
+        display_date_divider(today)
+        
+        # チャット履歴を表示
+        for msg in st.session_state.chat_history:
+            if msg["type"] == "user":
+                display_user_message(msg["content"], msg["timestamp"])
+            else:
+                display_bot_message(msg["content"], msg["timestamp"])
+        
+        # 現在の会話を表示（フィードバック前のみ）
+        if st.session_state.current_question and not st.session_state.feedback_given:
+            display_user_message(st.session_state.current_question)
+            
+            # ボットの応答を表示
+            if st.session_state.current_answer:
+                display_bot_message(st.session_state.current_answer)
+                
+                # フィードバックフォームを表示
+                display_feedback_form()
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    # 入力エリア（LINE風の入力ボックス）
+    st.markdown("<br><br>", unsafe_allow_html=True)  # スペースを空ける
+    
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        user_question = st.text_area("メッセージを入力", key="question_input", height=70, 
+                                    value="")
+    with col2:
+        st.markdown("<br>", unsafe_allow_html=True)  # 位置調整
+        submit_button = st.button("送信")
+    
+    # 送信ボタンが押された場合
     if submit_button and user_question:
         st.session_state.current_question = user_question
-        st.session_state.current_answer = "" # 回答をリセット
-        st.session_state.feedback_given = False # フィードバック状態もリセット
-
-        with st.spinner("モデルが回答を生成中..."):
-            answer, response_time = generate_response(pipe, user_question)
-            st.session_state.current_answer = answer
-            st.session_state.response_time = response_time
-            # ここでrerunすると回答とフィードバックが一度に表示される
-            st.rerun()
-
-    # 回答が表示されるべきか判断 (質問があり、回答が生成済みで、まだフィードバックされていない)
-    if st.session_state.current_question and st.session_state.current_answer:
-        st.subheader("回答:")
-        st.markdown(st.session_state.current_answer) # Markdownで表示
-        st.info(f"応答時間: {st.session_state.response_time:.2f}秒")
-
-        # フィードバックフォームを表示 (まだフィードバックされていない場合)
-        if not st.session_state.feedback_given:
-            display_feedback_form()
-        else:
-             # フィードバック送信済みの場合、次の質問を促すか、リセットする
-             if st.button("次の質問へ"):
-                  # 状態をリセット
-                  st.session_state.current_question = ""
-                  st.session_state.current_answer = ""
-                  st.session_state.response_time = 0.0
-                  st.session_state.feedback_given = False
-                  st.rerun() # 画面をクリア
-
+        st.session_state.current_answer = ""
+        st.session_state.feedback_given = False
+        
+        with st.spinner("入力中..."):
+            try:
+                answer, response_time = generate_response(pipe, user_question)
+                
+                # デバッグ情報（問題診断用）
+                if answer is None or answer.strip() == "":
+                    st.error("LLMからの応答が空です。llm.pyのgenerate_response関数を確認してください。")
+                    answer = "応答を取得できませんでした。"
+                    
+                st.session_state.current_answer = answer
+                st.session_state.response_time = response_time
+                
+                # 明示的に再描画
+                st.rerun()
+            except Exception as e:
+                import traceback
+                st.error(f"エラーが発生しました: {str(e)}")
+                st.code(traceback.format_exc())
+                st.session_state.current_answer = f"エラーが発生しました: {str(e)}"
 
 def display_feedback_form():
-    """フィードバック入力フォームを表示する"""
+    """LINE風のフィードバックスタンプを表示"""
+    st.markdown("<div class='feedback-area'>", unsafe_allow_html=True)
+    st.markdown("### この回答はどうでしたか？")
+    
+    # フォーム内容
     with st.form("feedback_form"):
-        st.subheader("フィードバック")
-        feedback_options = ["正確", "部分的に正確", "不正確"]
-        # label_visibility='collapsed' でラベルを隠す
-        feedback = st.radio("回答の評価", feedback_options, key="feedback_radio", label_visibility='collapsed', horizontal=True)
-        correct_answer = st.text_area("より正確な回答（任意）", key="correct_answer_input", height=100)
-        feedback_comment = st.text_area("コメント（任意）", key="feedback_comment_input", height=100)
-        submitted = st.form_submit_button("フィードバックを送信")
+        cols = st.columns(3)
+        with cols[0]:
+            like = st.checkbox("👍 正確!", key="like_checkbox")
+        with cols[1]:
+            neutral = st.checkbox("🤔 まあまあ", key="neutral_checkbox")
+        with cols[2]:
+            dislike = st.checkbox("👎 いまいち", key="dislike_checkbox")
+        
+        # チェックボックスからフィードバック値を計算
+        feedback = "正確" if like else ("部分的に正確" if neutral else "不正確")
+        
+        # フィードバックテキスト入力（省略可能）
+        correct_answer = st.text_area("より良い回答の提案（省略可能）", key="correct_answer_input", height=80, 
+                                     help="より適切な回答がある場合に入力してください")
+        feedback_comment = st.text_area("コメント（省略可能）", key="feedback_comment_input", height=80,
+                                      help="その他のフィードバックを入力してください")
+        
+        # 送信ボタン
+        cols = st.columns([3, 1])
+        with cols[1]:
+            submitted = st.form_submit_button("送信")
+        
         if submitted:
             # フィードバックをデータベースに保存
             is_correct = 1.0 if feedback == "正確" else (0.5 if feedback == "部分的に正確" else 0.0)
-            # コメントがない場合でも '正確' などの評価はfeedbackに含まれるようにする
             combined_feedback = f"{feedback}"
             if feedback_comment:
                 combined_feedback += f": {feedback_comment}"
@@ -83,24 +345,45 @@ def display_feedback_form():
                 is_correct,
                 st.session_state.response_time
             )
+            
+            # チャット履歴に追加
+            now = datetime.datetime.now().strftime("%H:%M")
+            st.session_state.chat_history.append({
+                "type": "user",
+                "content": st.session_state.current_question,
+                "timestamp": now
+            })
+            st.session_state.chat_history.append({
+                "type": "bot",
+                "content": st.session_state.current_answer,
+                "timestamp": now
+            })
+            
+            # フォーム状態をリセット
+            st.session_state.current_question = ""
+            st.session_state.current_answer = ""
             st.session_state.feedback_given = True
-            st.success("フィードバックが保存されました！")
-            # フォーム送信後に状態をリセットしない方が、ユーザーは結果を確認しやすいかも
-            # 必要ならここでリセットして st.rerun()
-            st.rerun() # フィードバックフォームを消すために再実行
+            
+            st.success("フィードバックをいただきありがとうございます！")
+            st.rerun()
+    
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # --- 履歴閲覧ページのUI ---
 def display_history_page():
     """履歴閲覧ページのUIを表示する"""
-    st.subheader("チャット履歴と評価指標")
+    # LINE風スタイルを適用
+    apply_line_style()
+    
+    st.subheader("💬 トーク履歴")
     history_df = get_chat_history()
 
     if history_df.empty:
-        st.info("まだチャット履歴がありません。")
+        st.info("まだトーク履歴がありません。")
         return
 
     # タブでセクションを分ける
-    tab1, tab2 = st.tabs(["履歴閲覧", "評価指標分析"])
+    tab1, tab2 = st.tabs(["トーク履歴", "分析レポート"])
 
     with tab1:
         display_history_list(history_df)
@@ -109,25 +392,26 @@ def display_history_page():
         display_metrics_analysis(history_df)
 
 def display_history_list(history_df):
-    """履歴リストを表示する"""
-    st.write("#### 履歴リスト")
-    # 表示オプション
+    """履歴リストをLINE風トーク画面で表示"""
+    st.markdown("#### トーク履歴")
+    
+    # フィルターオプション
     filter_options = {
         "すべて表示": None,
-        "正確なもののみ": 1.0,
-        "部分的に正確なもののみ": 0.5,
-        "不正確なもののみ": 0.0
+        "👍 正確!": 1.0,
+        "🤔 まあまあ": 0.5,
+        "👎 いまいち": 0.0
     }
+    
     display_option = st.radio(
         "表示フィルタ",
         options=filter_options.keys(),
         horizontal=True,
-        label_visibility="collapsed" # ラベル非表示
+        label_visibility="collapsed"
     )
 
     filter_value = filter_options[display_option]
     if filter_value is not None:
-        # is_correctがNaNの場合を考慮
         filtered_df = history_df[history_df["is_correct"].notna() & (history_df["is_correct"] == filter_value)]
     else:
         filtered_df = history_df
@@ -136,67 +420,88 @@ def display_history_list(history_df):
         st.info("選択した条件に一致する履歴はありません。")
         return
 
+    # グループ化して日付ごとに表示
+    filtered_df['date'] = pd.to_datetime(filtered_df['timestamp']).dt.date
+    unique_dates = filtered_df['date'].unique()
+    
     # ページネーション
-    items_per_page = 5
-    total_items = len(filtered_df)
-    total_pages = (total_items + items_per_page - 1) // items_per_page
-    current_page = st.number_input('ページ', min_value=1, max_value=total_pages, value=1, step=1)
+    dates_per_page = 1  # 1日分ずつ表示
+    total_pages = len(unique_dates)
+    
+    current_page = st.number_input('ページ', min_value=1, max_value=max(1, total_pages), value=1, step=1)
+    start_idx = (current_page - 1) % total_pages
+    
+    # 選択された日付のデータを表示
+    if start_idx < len(unique_dates):
+        selected_date = unique_dates[start_idx]
+        date_df = filtered_df[filtered_df['date'] == selected_date]
+        
+        # LINE風のチャット表示
+        st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+        
+        # 日付の区切り線を表示
+        display_date_divider(selected_date.strftime("%Y年%m月%d日"))
+        
+        # その日の会話を時系列で表示
+        for _, row in date_df.iterrows():
+            # 時刻だけ抽出
+            time_str = pd.to_datetime(row['timestamp']).strftime("%H:%M")
+            
+            # ユーザーの質問
+            display_user_message(row['question'], time_str)
+            
+            # AIの回答
+            display_bot_message(row['answer'], time_str)
+            
+            # フィードバック情報がある場合
+            if pd.notna(row['feedback']):
+                with st.expander("📝 フィードバック詳細"):
+                    st.markdown(f"**評価:** {row['feedback']}")
+                    if pd.notna(row['correct_answer']) and row['correct_answer'] != "":
+                        st.markdown(f"**提案された回答:** {row['correct_answer']}")
+                    
+                    # 評価指標の表示
+                    metrics_cols = st.columns(4)
+                    metrics_cols[0].metric("正確性", f"{row['is_correct']:.1f}")
+                    metrics_cols[1].metric("応答時間", f"{row['response_time']:.2f}秒")
+                    metrics_cols[2].metric("単語数", f"{row['word_count']}")
+                    metrics_cols[3].metric("BLEU", f"{row['bleu_score']:.4f}" if pd.notna(row['bleu_score']) else "-")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        st.caption(f"{total_pages}日分中 {start_idx+1}日目を表示")
+    else:
+        st.info("表示できるデータがありません。")
 
-    start_idx = (current_page - 1) * items_per_page
-    end_idx = start_idx + items_per_page
-    paginated_df = filtered_df.iloc[start_idx:end_idx]
-
-
-    for i, row in paginated_df.iterrows():
-        with st.expander(f"{row['timestamp']} - Q: {row['question'][:50] if row['question'] else 'N/A'}..."):
-            st.markdown(f"**Q:** {row['question']}")
-            st.markdown(f"**A:** {row['answer']}")
-            st.markdown(f"**Feedback:** {row['feedback']}")
-            if row['correct_answer']:
-                st.markdown(f"**Correct A:** {row['correct_answer']}")
-
-            # 評価指標の表示
-            st.markdown("---")
-            cols = st.columns(3)
-            cols[0].metric("正確性スコア", f"{row['is_correct']:.1f}")
-            cols[1].metric("応答時間(秒)", f"{row['response_time']:.2f}")
-            cols[2].metric("単語数", f"{row['word_count']}")
-
-            cols = st.columns(4)
-            # NaNの場合はハイフン表示
-            cols[0].metric("BLEU", f"{row['bleu_score']:.4f}" if pd.notna(row['bleu_score']) else "-")
-            cols[1].metric("類似度", f"{row['similarity_score']:.4f}" if pd.notna(row['similarity_score']) else "-")
-            cols[2].metric("関連性", f"{row['relevance_score']:.4f}" if pd.notna(row['relevance_score']) else "-")
-            cols[3].metric("具体性", f"{row['specificity_score']:.4f}" if pd.notna(row['specificity_score']) else "-")
-
-    st.caption(f"{total_items} 件中 {start_idx+1} - {min(end_idx, total_items)} 件を表示")
-
+# 以下の関数は基本的な機能は変えずにスタイルだけLINE風に変更
 
 def display_metrics_analysis(history_df):
     """評価指標の分析結果を表示する"""
-    st.write("#### 評価指標の分析")
+    # LINE風スタイルを適用済み
+    st.write("#### 会話の分析レポート")
 
     # is_correct が NaN のレコードを除外して分析
     analysis_df = history_df.dropna(subset=['is_correct'])
     if analysis_df.empty:
-        st.warning("分析可能な評価データがありません。")
+        st.warning("分析可能なデータがありません。")
         return
 
-    accuracy_labels = {1.0: '正確', 0.5: '部分的に正確', 0.0: '不正確'}
-    analysis_df['正確性'] = analysis_df['is_correct'].map(accuracy_labels)
+    # 評価ラベルをLINEらしく変更
+    accuracy_labels = {1.0: '👍 正確!', 0.5: '🤔 まあまあ', 0.0: '👎 いまいち'}
+    analysis_df['評価'] = analysis_df['is_correct'].map(accuracy_labels)
 
     # 正確性の分布
-    st.write("##### 正確性の分布")
-    accuracy_counts = analysis_df['正確性'].value_counts()
+    st.write("##### フィードバック分布")
+    accuracy_counts = analysis_df['評価'].value_counts()
     if not accuracy_counts.empty:
         st.bar_chart(accuracy_counts)
     else:
-        st.info("正確性データがありません。")
+        st.info("評価データがありません。")
 
+    # 以下の分析部分は基本的な機能を維持
     # 応答時間と他の指標の関係
     st.write("##### 応答時間とその他の指標の関係")
     metric_options = ["bleu_score", "similarity_score", "relevance_score", "word_count"]
-    # 利用可能な指標のみ選択肢に含める
     valid_metric_options = [m for m in metric_options if m in analysis_df.columns and analysis_df[m].notna().any()]
 
     if valid_metric_options:
@@ -206,20 +511,19 @@ def display_metrics_analysis(history_df):
             key="metric_select"
         )
 
-        chart_data = analysis_df[['response_time', metric_option, '正確性']].dropna() # NaNを除外
+        chart_data = analysis_df[['response_time', metric_option, '評価']].dropna()
         if not chart_data.empty:
              st.scatter_chart(
                 chart_data,
                 x='response_time',
                 y=metric_option,
-                color='正確性',
+                color='評価',
             )
         else:
             st.info(f"選択された指標 ({metric_option}) と応答時間の有効なデータがありません。")
 
     else:
         st.info("応答時間と比較できる指標データがありません。")
-
 
     # 全体の評価指標の統計
     st.write("##### 評価指標の統計")
@@ -232,57 +536,51 @@ def display_metrics_analysis(history_df):
         st.info("統計情報を計算できる評価指標データがありません。")
 
     # 正確性レベル別の平均スコア
-    st.write("##### 正確性レベル別の平均スコア")
-    if valid_stats_cols and '正確性' in analysis_df.columns:
+    st.write("##### 評価レベル別の平均スコア")
+    if valid_stats_cols and '評価' in analysis_df.columns:
         try:
-            accuracy_groups = analysis_df.groupby('正確性')[valid_stats_cols].mean()
+            accuracy_groups = analysis_df.groupby('評価')[valid_stats_cols].mean()
             st.dataframe(accuracy_groups)
         except Exception as e:
-            st.warning(f"正確性別スコアの集計中にエラーが発生しました: {e}")
+            st.warning(f"評価別スコアの集計中にエラーが発生しました: {e}")
     else:
-         st.info("正確性レベル別の平均スコアを計算できるデータがありません。")
-
+         st.info("評価レベル別の平均スコアを計算できるデータがありません。")
 
     # カスタム評価指標：効率性スコア
     st.write("##### 効率性スコア (正確性 / (応答時間 + 0.1))")
     if 'response_time' in analysis_df.columns and analysis_df['response_time'].notna().any():
-        # ゼロ除算を避けるために0.1を追加
         analysis_df['efficiency_score'] = analysis_df['is_correct'] / (analysis_df['response_time'].fillna(0) + 0.1)
-        # IDカラムが存在するか確認
         if 'id' in analysis_df.columns:
-            # 上位10件を表示
             top_efficiency = analysis_df.sort_values('efficiency_score', ascending=False).head(10)
-            # id をインデックスにする前に存在確認
             if not top_efficiency.empty:
                 st.bar_chart(top_efficiency.set_index('id')['efficiency_score'])
             else:
                 st.info("効率性スコアデータがありません。")
         else:
-            # IDがない場合は単純にスコアを表示
              st.bar_chart(analysis_df.sort_values('efficiency_score', ascending=False).head(10)['efficiency_score'])
-
     else:
         st.info("効率性スコアを計算するための応答時間データがありません。")
-
 
 # --- サンプルデータ管理ページのUI ---
 def display_data_page():
     """サンプルデータ管理ページのUIを表示する"""
-    st.subheader("サンプル評価データの管理")
+    # LINE風スタイルを適用
+    apply_line_style()
+    
+    st.subheader("🗂 データ管理")
     count = get_db_count()
-    st.write(f"現在のデータベースには {count} 件のレコードがあります。")
+    st.write(f"現在のデータベースには {count} 件のトーク履歴があります。")
 
     col1, col2 = st.columns(2)
     with col1:
         if st.button("サンプルデータを追加", key="create_samples"):
             create_sample_evaluation_data()
-            st.rerun() # 件数表示を更新
+            st.rerun()
 
     with col2:
-        # 確認ステップ付きのクリアボタン
         if st.button("データベースをクリア", key="clear_db_button"):
-            if clear_db(): # clear_db内で確認と実行を行う
-                st.rerun() # クリア後に件数表示を更新
+            if clear_db():
+                st.rerun()
 
     # 評価指標に関する解説
     st.subheader("評価指標の説明")
