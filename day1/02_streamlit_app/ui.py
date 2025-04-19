@@ -53,6 +53,7 @@ def apply_line_style():
             background-color: #FFFFFF;  /* 背景色を白に設定 */
             color: #333333;  /* テキスト色を濃く設定 */
             font-weight: normal;  /* テキストを標準の太さに */
+            caret-color: {line_primary_color} !important;
         }}
 
         /* テキストエリアのラベル */
@@ -61,6 +62,11 @@ def apply_line_style():
             font-weight: bold;  /* ラベルを太字に */
         }}
         
+        /* セレクトボックスのテキスト */
+        .stSelectbox label, .stSelectbox div[data-baseweb="select"] {{
+            color: #333333 !important;
+        }}
+
         /* LINE風チャット画面のコンテナ */
         .chat-container {{
             background-color: {line_chat_bg};
@@ -138,6 +144,7 @@ def apply_line_style():
             border-radius: 4px 4px 0px 0px;
             font-weight: bold;
             font-size: 14px;
+            color: #333333 !important;
         }}
         
         /* フィードバックエリア */
@@ -166,6 +173,19 @@ def apply_line_style():
             background: {line_light_gray};
             margin: 0 10px;
             vertical-align: middle;
+        }}
+
+        /* メトリクス表示のスタイル */
+        .stMetric {{
+            color: {line_text_color} !important;
+        }}
+        
+        .stMetric .st-emotion-cache-1wivap2 {{  /* メトリクス値の色を濃くする */
+            color: {line_text_color} !important;
+        }}
+        
+        .stMetric .st-emotion-cache-r421ms {{  /* メトリクスラベルの色を濃くする */
+            color: {line_text_color} !important;
         }}
     </style>
     """, unsafe_allow_html=True)
@@ -363,6 +383,10 @@ def display_feedback_form():
             st.session_state.current_question = ""
             st.session_state.current_answer = ""
             st.session_state.feedback_given = True
+
+            # 質問入力欄をリセット
+            if "question_input" in st.session_state:
+                st.session_state.question_input = ""
             
             st.success("フィードバックをいただきありがとうございます！")
             st.rerun()
@@ -403,12 +427,69 @@ def display_history_list(history_df):
         "👎 いまいち": 0.0
     }
     
-    display_option = st.radio(
-        "表示フィルタ",
-        options=filter_options.keys(),
-        horizontal=True,
-        label_visibility="collapsed"
-    )
+    # HTMLで直接カスタムスタイルのラジオボタンを作成
+    st.markdown("""
+    <style>
+    .custom-filter {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+    .filter-btn {
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-weight: bold;
+        cursor: pointer;
+        border: 1px solid #ddd;
+        background-color: #f9f9f9;
+        transition: all 0.3s;
+    }
+    .filter-btn:hover {
+        background-color: #eee;
+    }
+    .filter-btn.active {
+        background-color: #F5F5F5;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .filter-all { color: #000000; }
+    .filter-good { color: #06C755; }
+    .filter-neutral { color: #FFA500; }
+    .filter-bad { color: #FF4500; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # セッション状態で選択を管理
+    if "filter_option" not in st.session_state:
+        st.session_state.filter_option = "すべて表示"
+    
+    # ラジオボタン代わりのクリックボタン
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        if st.button("すべて表示", key="filter_all"):
+            st.session_state.filter_option = "すべて表示"
+            st.rerun()
+    
+    with col2:
+        if st.button("👍 正確!", key="filter_good"):
+            st.session_state.filter_option = "👍 正確!"
+            st.rerun()
+    
+    with col3:
+        if st.button("🤔 まあまあ", key="filter_neutral"):
+            st.session_state.filter_option = "🤔 まあまあ"
+            st.rerun()
+    
+    with col4:
+        if st.button("👎 いまいち", key="filter_bad"):
+            st.session_state.filter_option = "👎 いまいち"
+            st.rerun()
+    
+    # 現在選択中のフィルターを表示
+    st.caption(f"現在のフィルター: {st.session_state.filter_option}")
+    
+    # フィルター適用
+    display_option = st.session_state.filter_option
 
     filter_value = filter_options[display_option]
     if filter_value is not None:
