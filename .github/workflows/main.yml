@@ -29,5 +29,4 @@ jobs:
 
       - name: Test with pytest
         run: |
-          cd day5
           pytest day5/演習3/tests/ -v
