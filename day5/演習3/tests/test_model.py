@@ -6,7 +6,7 @@ import pickle
 import time
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.compose import ColumnTransformer
@@ -16,6 +16,7 @@ from sklearn.pipeline import Pipeline
 DATA_PATH = os.path.join(os.path.dirname(__file__), "../data/Titanic.csv")
 MODEL_DIR = os.path.join(os.path.dirname(__file__), "../models")
 MODEL_PATH = os.path.join(MODEL_DIR, "titanic_model.pkl")
+BASELINE_MODEL_PATH = os.path.join(MODEL_DIR, "titanic_model_baseline.pkl")
 
 
 @pytest.fixture
@@ -171,3 +172,64 @@ def test_model_reproducibility(sample_data, preprocessor):
     assert np.array_equal(
         predictions1, predictions2
     ), "モデルの予測結果に再現性がありません"
+
+def test_model_f1_score(train_model):
+    """モデルのF1スコアを検証"""
+    model, X_test, y_test = train_model
+
+    # 予測とF1スコア計算
+    y_pred = model.predict(X_test)
+    f1 = f1_score(y_test, y_pred)
+
+    # Titanicデータセットでは0.7以上のF1スコアが一般的に良いとされる
+    assert f1 >= 0.7, f"モデルのF1スコアが低すぎます: {f1}"
+    print(f"F1スコア: {f1}")
+
+def test_model_precision_recall(train_model):
+    """モデルの適合率と再現率を検証"""
+    model, X_test, y_test = train_model
+
+    # 予測と各種スコア計算
+    y_pred = model.predict(X_test)
+    precision = precision_score(y_test, y_pred)
+    recall = recall_score(y_test, y_pred)
+
+    # 検証
+    assert precision >= 0.7, f"モデルの適合率が低すぎます: {precision}"
+    assert recall >= 0.6, f"モデルの再現率が低すぎます: {recall}"
+    print(f"適合率: {precision}, 再現率: {recall}")
+
+def save_baseline_model(train_model):
+    """現在のモデルをベースラインとして保存するヘルパー関数"""
+    model, _, _ = train_model
+    os.makedirs(MODEL_DIR, exist_ok=True)
+    with open(BASELINE_MODEL_PATH, 'wb') as f:
+        pickle.dump(model, f)
+    return True
+
+def test_compare_with_baseline_model(train_model):
+    """現在のモデルと過去のベースラインモデルを比較"""
+    current_model, X_test, y_test = train_model
+    
+    # ベースラインモデルが存在しない場合は作成してスキップ
+    if not os.path.exists(BASELINE_MODEL_PATH):
+        save_baseline_model(train_model)
+        pytest.skip("ベースラインモデルが存在しないため作成し、テストをスキップします")
+    
+    # ベースラインモデルを読み込む
+    with open(BASELINE_MODEL_PATH, 'rb') as f:
+        baseline_model = pickle.load(f)
+    
+    # 両方のモデルで予測
+    current_pred = current_model.predict(X_test)
+    baseline_pred = baseline_model.predict(X_test)
+    
+    # 精度比較
+    current_accuracy = accuracy_score(y_test, current_pred)
+    baseline_accuracy = accuracy_score(y_test, baseline_pred)
+    
+    # 新モデルは既存モデルよりも精度が悪くないことを確認
+    assert current_accuracy >= baseline_accuracy * 0.95, \
+        f"新モデル({current_accuracy:.4f})の精度が既存モデル({baseline_accuracy:.4f})より5%以上低下しています"
+    
+    print(f"比較結果: 現在モデル精度={current_accuracy:.4f}, ベースライン精度={baseline_accuracy:.4f}")
